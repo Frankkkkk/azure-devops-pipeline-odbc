@@ -1,0 +1,36 @@
+stages:
+- stage: SnapshotDB
+  jobs:
+  - job: Snapshot
+    steps:
+    - task: Cache@2
+      inputs:
+        key: 'pip | "$(Agent.OS)" | .\requirements.txt'
+        restoreKeys: 'pip | "$(Agent.OS)"'
+        path: .
+      displayName: Cache pip venv libraries
+
+    - script: |
+        python -m venv env
+        call env\Scripts\activate
+        pip install -r requirements.txt
+      displayName: 'Install python libraries'
+
+    - task: AzurePowerShell@5
+      inputs:
+        azureSubscription: 'SERVICE-CONNECTION-NAME'
+        azurePowerShellVersion: 'latestVersion'
+        scriptType: 'inlineScript'
+        inline: |
+          # Import needed modules
+          Import-Module Az.Accounts -MinimumVersion 2.2.0
+          
+          # Get an access token with the Service Principal used in the Azure DevOps Pipeline
+          $access_token = (Get-AzAccessToken -ResourceUrl https://database.windows.net).Token
+          $env:AZURE_DB_TOKEN = $access_token
+
+          # Activate the virtual environment
+          .\env\Scripts/activate.ps1
+          python run.py
+          exit $LASTEXITCODE
+
